@@ -55,4 +55,4 @@ Check the example below.
 
 #### Example of web page
 
-[![Lexample](example-graph.png)](#)
+[![Lexample](example-graph.png)](example-graph.png)
