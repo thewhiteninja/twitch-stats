@@ -1,7 +1,9 @@
 import datetime
+import shutil
 
 import pygal
 import pytz
+from flask import escape
 from pygal.style import DefaultStyle
 from pymongo import MongoClient
 
@@ -13,6 +15,7 @@ html = '''
 <!DOCTYPE html>
 <html>
   <head>
+      <meta charset="utf-8"/>
       <style>
         table tbody tr:hover {
             background-color: #f8f8f8;
@@ -162,6 +165,15 @@ def generate_graph_today(channel, shift=0):
     bar_chart.add('Deleted', data_plot_deleted)
     clear_message = bar_chart.render_data_uri()
 
+    to_graph = []
+    for a in deleted:
+        a["__type__"] = "deleted"
+        to_graph.append(a)
+    for a in bans:
+        a["__type__"] = "ban"
+        to_graph.append(a)
+    to_graph = sorted(to_graph, key=lambda x:x["tmi-sent-ts"])
+
     tr_clear = "\n".join([
         '''
         <tr>
@@ -170,11 +182,10 @@ def generate_graph_today(channel, shift=0):
           <td style="word-break:break-word;padding:0.5ex 1em;border-right:1px solid #f0f0f0;">%s</td>
           <td style="text-align:center;padding:0.5ex 1em;">Deleted</td>
         </tr>
-        ''' % (datetime.datetime.fromtimestamp(d["tmi-sent-ts"] / 1000.0).astimezone(pytz.timezone('Europe/Paris')),
+        ''' % (datetime.datetime.fromtimestamp(d["tmi-sent-ts"] / 1000.0).astimezone(pytz.timezone('Europe/Paris')).replace(microsecond=0),
                d["@login"], d["msg"])
-        for d in deleted
-    ])
-    tr_clear += "\n".join([
+        if d["__type__"] == "deleted"
+        else
         '''
         <tr>
           <td style="text-align:center;padding:0.5ex 1em;border-right:1px solid #f0f0f0;">%s</td>
@@ -182,13 +193,15 @@ def generate_graph_today(channel, shift=0):
           <td style="word-break:break-word;padding:0.5ex 1em;border-right:1px solid #f0f0f0;">%s</td>
           <td style="text-align:center;padding:0.5ex 1em;">%s</td>
         </tr>
-        ''' % (datetime.datetime.fromtimestamp(d["tmi-sent-ts"] / 1000.0).astimezone(pytz.timezone('Europe/Paris')),
-               d["@login"], d["msg"] if "msg" in d else "",
-               "Ban (%s)" % (str(d["@ban-duration"]) if d["@ban-duration"] != 0 else "Permanent"))
-        for d in bans
+        ''' % (datetime.datetime.fromtimestamp(d["tmi-sent-ts"] / 1000.0).astimezone(pytz.timezone('Europe/Paris')).replace(microsecond=0),
+        escape(d["@login"]), escape(d["msg"].encode('utf8').decode('utf8')) if "msg" in d else "",
+        "Ban (%s)" % (str(d["@ban-duration"]) if d["@ban-duration"] != 0 else "Permanent"))
+
+        for d in to_graph
     ])
 
-    f = open('%s_%s_stats.html' % (channel, start.strftime("%m%d%Y")), "w")
+    filename = '%s_%s_stats.html' % (channel, start.strftime("%m%d%Y"))
+    f = open(filename, "w")
     cur_html = html
     cur_html = cur_html.replace("__GRAPH_MESSAGES__", graph_message)
     cur_html = cur_html.replace("__GRAPH_CLEAR__", clear_message)
@@ -197,10 +210,12 @@ def generate_graph_today(channel, shift=0):
     f.write(cur_html)
     f.close()
 
+    shutil.copyfile(filename, "latest.html")
+
 
 def main():
     welcome()
-    generate_graph_today("lestream")
+    generate_graph_today("mystream")
 
 
 if __name__ == '__main__':
